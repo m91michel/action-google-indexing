@@ -10,6 +10,10 @@ inputs:
   gcpServiceAccountKey:
     description: 'The GCP service account key in JSON format.'
     required: true
+  cacheTimeout:
+    description: 'The cache timeout in milliseconds.'
+    required: false
+    default: 1000 * 60 * 60 * 24 * 7 # 7 days
 
 runs:
   using: node20

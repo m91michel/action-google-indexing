@@ -12,13 +12,21 @@ import {
 import { getSitemapPages } from './shared/sitemap.mjs'
 import { batch } from './shared/utils.mjs'
 
-const CACHE_TIMEOUT = 1000 * 60 * 60 * 24 * 7 // 7 days
+const CACHE_TIMEOUT_DEFAULT = 1000 * 60 * 60 * 24 * 7 // 7 days
 
 export const run = async () => {
   const siteUrlInput = core.getInput('siteUrl', { required: true })
   const gcpSaKeyInput = core.getInput('gcpServiceAccountKey', {
     required: true
   })
+  const cacheTimeoutInput = core.getInput('cacheTimeout')
+  const cacheTimeout =
+    parseInt(cacheTimeoutInput) > 0
+      ? parseInt(cacheTimeoutInput)
+      : CACHE_TIMEOUT_DEFAULT
+
+  const cacheTimeoutDays = cacheTimeout / 1000 / 60 / 60 / 24
+  core.info(`🕛 Cache timeout: ${cacheTimeoutDays} days`)
 
   const accessToken = await getAccessToken(gcpSaKeyInput)
   const siteUrl = convertToSiteUrl(siteUrlInput)
@@ -66,7 +74,7 @@ export const run = async () => {
 
   const shouldRecheck = (status, lastCheckedAt) => {
     const shouldIndexIt = indexableStatuses.includes(status)
-    const isOld = new Date(lastCheckedAt) < new Date(Date.now() - CACHE_TIMEOUT)
+    const isOld = new Date(lastCheckedAt) < new Date(Date.now() - cacheTimeout)
     return shouldIndexIt || isOld
   }
 
