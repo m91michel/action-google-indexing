@@ -12,7 +12,7 @@ import {
 import { getSitemapPages } from './shared/sitemap.mjs'
 import { batch } from './shared/utils.mjs'
 
-const CACHE_TIMEOUT_DEFAULT = 1000 * 60 * 60 * 24 * 7 // 7 days
+const CACHE_TIMEOUT_DEFAULT = 1000 * 60 * 60 * 24 * 60 // 60 days
 
 export const run = async () => {
   const siteUrlInput = core.getInput('siteUrl', { required: true })
