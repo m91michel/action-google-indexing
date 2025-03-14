@@ -81,24 +81,16 @@ export const run = async () => {
 
     await batch(
       async url => {
-        try {
-          let result = statusPerUrl[url]
-          if (!result || shouldRecheck(result.status, result.lastCheckedAt)) {
-            const status = await getPageIndexingStatus(accessToken, siteUrl, url)
-            result = { status, lastCheckedAt: new Date().toISOString() }
-            statusPerUrl[url] = result
-          }
-
-          pagesPerStatus[result.status] = pagesPerStatus[result.status]
-            ? [...pagesPerStatus[result.status], url]
-            : [url]
-        } catch (error) {
-          if (error.message.includes('QUOTA_EXCEEDED')) {
-            core.warning('🛑 API quota exceeded (429). Stopping URL processing but will save current results.')
-            throw new Error('STOP_PROCESSING_BUT_SAVE_RESULTS')
-          }
-          throw error; // Re-throw other errors
+        let result = statusPerUrl[url]
+        if (!result || shouldRecheck(result.status, result.lastCheckedAt)) {
+          const status = await getPageIndexingStatus(accessToken, siteUrl, url)
+          result = { status, lastCheckedAt: new Date().toISOString() }
+          statusPerUrl[url] = result
         }
+
+        pagesPerStatus[result.status] = pagesPerStatus[result.status]
+          ? [...pagesPerStatus[result.status], url]
+          : [url]
       },
       pages,
       50,
@@ -106,10 +98,12 @@ export const run = async () => {
         core.info(`📦 Batch ${batchIndex + 1} of ${batchCount} complete`)
       }
     ).catch(error => {
-      if (!error.message.includes('STOP_PROCESSING_BUT_SAVE_RESULTS')) {
-        throw error;
+      if (error.message.includes('QUOTA_EXCEEDED')) {
+        core.warning('🛑 API quota exceeded (429). Stopping URL processing but will save current results.')
+        // Don't rethrow, just continue with saving what we have
+        return;
       }
-      core.warning('Stopped URL processing due to quota limits. Saving current results.');
+      throw error;
     });
 
     core.info(``)
@@ -141,20 +135,30 @@ export const run = async () => {
 
     let hitQuotaLimit = false;
 
+    // Process indexable pages sequentially to avoid multiple quota exceeded messages
     for (const url of indexablePages) {
       if (hitQuotaLimit) {
-        core.info(`📄 Skipping url: ${url} (quota exceeded)`)
-        continue;
+        core.info(`📄 Skipping remaining URLs (quota exceeded)`)
+        break; // Exit the loop entirely instead of continuing
       }
 
       core.info(`📄 Processing url: ${url}`)
       try {
         const status = await getPublishMetadata(accessToken, url)
         if (status === 404) {
-          await requestIndexing(accessToken, url)
-          core.info(
-            '🚀 Indexing requested successfully. It may take a few days for Google to process it.'
-          )
+          try {
+            await requestIndexing(accessToken, url)
+            core.info(
+              '🚀 Indexing request sent to Google. It may take a few days for Google to process it.'
+            )
+          } catch (error) {
+            if (error.message.includes('QUOTA_EXCEEDED')) {
+              core.warning('🛑 API quota exceeded (429). Stopping indexing but will save current results.')
+              hitQuotaLimit = true;
+              break; // Exit the loop on quota exceeded
+            }
+            throw error;
+          }
         } else if (status < 400) {
           core.info(
             `🕛 Indexing already requested previously. It may take a few days for Google to process it.`
@@ -164,9 +168,9 @@ export const run = async () => {
         if (error.message.includes('QUOTA_EXCEEDED')) {
           core.warning('🛑 API quota exceeded (429). Stopping indexing but will save current results.')
           hitQuotaLimit = true;
-          continue;
+          break; // Exit the loop on quota exceeded
         }
-        throw error; // Re-throw other errors
+        throw error;
       }
       core.info(``)
     }
@@ -176,13 +180,13 @@ export const run = async () => {
     core.info(``)
 
     if (hitQuotaLimit) {
-      core.warning(`⚠️ Completed with partial results due to API quota limits. The remaining URLs will be processed in the next run.`)
+      core.info(`⚠️ Completed with partial results due to API quota limits. The remaining URLs will be processed in the next run.`)
     }
 
     core.info(`👍 All done!`)
     core.info(`💖 Brought to you by https://seogets.com - SEO Analytics.`)
   } catch (error) {
-    if (error.message.includes('QUOTA_EXCEEDED') || error.message.includes('STOP_PROCESSING_BUT_SAVE_RESULTS')) {
+    if (error.message.includes('QUOTA_EXCEEDED')) {
       core.warning('API quota exceeded. Partial results were saved.')
       return;
     }

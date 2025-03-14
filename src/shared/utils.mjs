@@ -5,25 +5,22 @@ export async function batch(task, items, batchSize, onBatchComplete) {
   const chunks = createChunks(items, batchSize);
   for (let i = 0; i < chunks.length; i++) {
     try {
-      await Promise.all(chunks[i].map(async (item) => {
+      // Process items sequentially instead of in parallel to stop immediately on quota exceeded
+      for (const item of chunks[i]) {
         try {
-          return await task(item);
+          await task(item);
         } catch (error) {
-          // If this is our special signal error, propagate it up
-          if (error.message.includes('STOP_PROCESSING_BUT_SAVE_RESULTS')) {
-            throw error;
+          if (error.message.includes('QUOTA_EXCEEDED')) {
+            throw error; // Stop immediately on quota exceeded
           }
-          // Otherwise handle the error for this item only
-          throw error;
+          throw error; // Re-throw other errors
         }
-      }));
+      }
       onBatchComplete(i, chunks.length);
     } catch (error) {
-      // If this is our special signal error, stop processing and propagate it up
-      if (error.message.includes('STOP_PROCESSING_BUT_SAVE_RESULTS')) {
-        throw error;
+      if (error.message.includes('QUOTA_EXCEEDED')) {
+        throw error; // Stop processing completely
       }
-      // For other errors, continue with the next batch
       throw error;
     }
   }
