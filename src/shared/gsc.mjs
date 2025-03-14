@@ -29,6 +29,14 @@ export async function getPageIndexingStatus(
       }
     )
 
+    if (response.status === 429) {
+      core.warning(`🛑 API quota exceeded.`)
+      const body = await response.text()
+      core.warning(`Response was: ${response.status}`)
+      core.warning(body)
+      throw new Error(`QUOTA_EXCEEDED: API quota exceeded (429)\n${body}`)
+    }
+
     if (response.status === 403) {
       core.error(`🔐 This service account doesn't have access to this site.`)
       core.error(await response.text())
@@ -45,6 +53,9 @@ export async function getPageIndexingStatus(
     const body = await response.json()
     return body.inspectionResult.indexStatusResult.coverageState
   } catch (error) {
+    if (error.message.includes('QUOTA_EXCEEDED')) {
+      throw error; // Re-throw quota exceeded errors
+    }
     core.error(`❌ Failed to get indexing status.`)
     core.error(`Error was: ${error}`)
     throw error
@@ -81,6 +92,14 @@ export async function getPublishMetadata(accessToken, url) {
     }
   )
 
+  if (response.status === 429) {
+    core.warning(`🛑 API quota exceeded.`)
+    const body = await response.text()
+    core.warning(`Response was: ${response.status}`)
+    core.warning(body)
+    throw new Error(`QUOTA_EXCEEDED: API quota exceeded (429)\n${body}`)
+  }
+
   if (response.status === 403) {
     core.error(`🔐 This service account doesn't have access to this site.`)
     core.error(`Response was: ${response.status}`)
@@ -111,6 +130,14 @@ export async function requestIndexing(accessToken, url) {
       })
     }
   )
+
+  if (response.status === 429) {
+    core.warning(`🛑 API quota exceeded.`)
+    const body = await response.text()
+    core.warning(`Response was: ${response.status}`)
+    core.warning(body)
+    throw new Error(`QUOTA_EXCEEDED: API quota exceeded (429)\n${body}`)
+  }
 
   if (response.status === 403) {
     core.error(`🔐 This service account doesn't have access to this site.`)

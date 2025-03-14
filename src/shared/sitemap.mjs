@@ -14,6 +14,14 @@ async function getSitemapsList(accessToken, siteUrl) {
     }
   })
 
+  if (response.status === 429) {
+    core.warning(`🛑 API quota exceeded.`)
+    const body = await response.text()
+    core.warning(`Response was: ${response.status}`)
+    core.warning(body)
+    throw new Error(`QUOTA_EXCEEDED: API quota exceeded (429)\n${body}`)
+  }
+
   if (response.status === 403) {
     core.error(`🔐 This service account doesn't have access to this site.`)
     return []
@@ -31,17 +39,26 @@ async function getSitemapsList(accessToken, siteUrl) {
 }
 
 export async function getSitemapPages(accessToken, siteUrl) {
-  const sitemaps = await getSitemapsList(accessToken, siteUrl)
+  try {
+    const sitemaps = await getSitemapsList(accessToken, siteUrl)
 
-  let pages = []
-  for (const url of sitemaps) {
-    const Google = new Sitemapper({
-      url
-    })
+    let pages = []
+    for (const url of sitemaps) {
+      const Google = new Sitemapper({
+        url
+      })
 
-    const { sites } = await Google.fetch()
-    pages = [...pages, ...sites]
+      const { sites } = await Google.fetch()
+      pages = [...pages, ...sites]
+    }
+
+    return [sitemaps, [...new Set(pages)]]
+  } catch (error) {
+    if (error.message.includes('QUOTA_EXCEEDED')) {
+      throw error; // Re-throw quota exceeded errors
+    }
+    core.error(`❌ Failed to get sitemap pages.`)
+    core.error(`Error was: ${error}`)
+    throw error
   }
-
-  return [sitemaps, [...new Set(pages)]]
 }
